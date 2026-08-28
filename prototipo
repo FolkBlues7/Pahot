@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Pahot - Plataforma de Provas e Correção OMR</title>
+  <link href="https://cdn.jsdelivr.net/npm/@mdi/font@7.x/css/materialdesignicons.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/vuetify@3.7.0/dist/vuetify.min.css" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui">
+  <style>
+    body { background-color: #f5f5f5; }
+    .gabarito-box { border: 2px dashed #3f51b5; padding: 20px; background: #fff; position: relative; }
+    .omr-mark { width: 16px; height: 16px; background: #000; position: absolute; }
+    .top-left { top: 8px; left: 8px; }
+    .top-right { top: 8px; right: 8px; }
+    .bottom-left { bottom: 8px; left: 8px; }
+    .bottom-right { bottom: 8px; right: 8px; }
+    table { width: 100%; border-collapse: collapse; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <v-app>
+      
+      <!-- BARRA SUPERIOR (MENU PRINCIPAL DE NAVEGAÇÃO) -->
+      <v-app-bar color="indigo-darken-3" v-if="!['login', 'cadastro', 'esqueciSenha'].includes(telaAtual)">
+        <v-app-bar-title class="font-weight-bold" style="cursor: pointer;" @click="telaAtual = 'questoes'">Pahot</v-app-bar-title>
+        
+        <v-btn variant="text" :color="telaAtual === 'questoes' ? 'amber-accent-2' : 'white'" @click="telaAtual = 'questoes'">
+          Banco de Questões
+        </v-btn>
+        <v-btn variant="text" :color="telaAtual === 'provas' ? 'amber-accent-2' : 'white'" @click="telaAtual = 'provas'">
+          Minhas Provas
+        </v-btn>
+        <v-btn variant="text" :color="telaAtual === 'correcao' ? 'amber-accent-2' : 'white'" @click="telaAtual = 'correcao'">
+          Corrigir Gabaritos
+        </v-btn>
+        <v-btn variant="text" :color="telaAtual === 'perfil' ? 'amber-accent-2' : 'white'" @click="telaAtual = 'perfil'">
+          Meu Perfil
+        </v-btn>
+        
+        <v-spacer></v-spacer>
+        
+        <v-btn color="amber-accent-4" variant="flat" class="mr-4" @click="gavetaProva = !gavetaProva">
+          <v-icon start>mdi-file-document-edit</v-icon>
+          Montar Prova ({{ prova.length }})
+        </v-btn>
+        
+        <v-btn icon @click="telaAtual = 'login'" title="Sair">
+          <v-icon>mdi-logout</v-icon>
+        </v-btn>
+      </v-app-bar>
+
+      <!-- GAVETA LATERAL (MONTAGEM DA PROVA) -->
+      <v-navigation-drawer v-model="gavetaProva" location="right" temporary width="350">
+        <v-card-title class="bg-indigo-lighten-5">Minha Prova - Pahot</v-card-title>
+        <v-list>
+          <v-list-item v-if="prova.length === 0">
+            Nenhuma questão selecionada.
+          </v-list-item>
+          <v-list-item v-for="(q, index) in prova" :key="index" :title="'Questão ' + (index + 1)" :subtitle="q.banca + ' - ' + q.materia">
+            <template v-slot:append>
+              <v-btn icon variant="text" color="red" size="small" @click="removerDaProva(index)">
+                <v-icon>mdi-delete</v-icon>
+              </v-btn>
+            </template>
+          </v-list-item>
+        </v-list>
+        <v-divider></v-divider>
+        <v-card-text>
+          <v-text-field label="Título da Prova / Disciplina" variant="outlined" density="compact"></v-text-field>
+          <v-text-field label="Instituição / Turma" variant="outlined" density="compact"></v-text-field>
+          <v-btn color="success" block prepend-icon="mdi-printer" @click="modalPdf = true">Gerar PDF + Gabarito OMR</v-btn>
+        </v-card-text>
+      </v-navigation-drawer>
+
+      <!-- ÁREA PRINCIPAL -->
+      <v-main class="bg-grey-lighten-4">
+        <v-container>
+
+          <!-- TELA 1: LOGIN -->
+          <v-row justify="center" align="center" style="height: 80vh;" v-if="telaAtual === 'login'">
+            <v-col cols="12" sm="8" md="4">
+              <v-card class="elevation-12">
+                <v-toolbar color="indigo-darken-3" title="Pahot - Login"></v-toolbar>
+                <v-card-text>
+                  <v-text-field label="E-mail" prepend-icon="mdi-email" type="email" variant="underlined"></v-text-field>
+                  <v-text-field label="Senha" prepend-icon="mdi-lock" type="password" variant="underlined"></v-text-field>
+                  <div class="text-right">
+                    <a href="#" style="font-size: 13px; color: #3f51b5; text-decoration: none;" @click.prevent="telaAtual = 'esqueciSenha'">Esqueci minha senha</a>
+                  </div>
+                </v-card-text>
+                <v-card-actions>
+                  <v-btn color="primary" variant="text" @click="telaAtual = 'cadastro'">Criar Conta</v-btn>
+                  <v-spacer></v-spacer>
+                  <v-btn color="indigo-darken-3" variant="elevated" @click="telaAtual = 'questoes'">Entrar</v-btn>
+                </v-card-actions>
+              </v-card>
+            </v-col>
+          </v-row>
+
+          <!-- TELA 2: CADASTRO DE USUÁRIO -->
+          <v-row justify="center" align="center" style="min-height: 80vh;" v-if="telaAtual === 'cadastro'">
+            <v-col cols="12" sm="8" md="5">
+              <v-card class="elevation-12">
+                <v-toolbar color="indigo-darken-3" title="Pahot - Criar Conta"></v-toolbar>
+                <v-card-text>
+                  <v-text-field label="Nome Completo" prepend-icon="mdi-account" variant="underlined"></v-text-field>
+                  <v-text-field label="E-mail" prepend-icon="mdi-email" type="email" variant="underlined"></v-text-field>
+                  <v-text-field label="Instituição / Escola" prepend-icon="mdi-school" variant="underlined"></v-text-field>
+                  <v-text-field label="Senha" prepend-icon="mdi-lock" type="password" variant="underlined"></v-text-field>
+                </v-card-text>
+                <v-card-actions>
+                  <v-btn variant="text" @click="telaAtual = 'login'">Voltar ao Login</v-btn>
+                  <v-spacer></v-spacer>
+                  <v-btn color="indigo-darken-3" variant="elevated" @click="telaAtual = 'questoes'">Cadastrar</v-btn>
+                </v-card-actions>
+              </v-card>
+            </v-col>
+          </v-row>
+
+          <!-- TELA 3: ESQUECI MINHA SENHA -->
+          <v-row justify="center" align="center" style="height: 80vh;" v-if="telaAtual === 'esqueciSenha'">
+            <v-col cols="12" sm="8" md="4">
+              <v-card class="elevation-12">
+                <v-toolbar color="indigo-darken-3" title="Recuperar Senha"></v-toolbar>
+                <v-card-text>
+                  <p class="text-body-2 mb-4 text-grey-darken-1">Digite seu e-mail cadastrado no Pahot.</p>
+                  <v-text-field label="E-mail Cadastrado" prepend-icon="mdi-email" type="email" variant="underlined"></v-text-field>
+                </v-card-text>
+                <v-card-actions>
+                  <v-btn variant="text" @click="telaAtual = 'login'">Voltar</v-btn>
+                  <v-spacer></v-spacer>
+                  <v-btn color="indigo-darken-3" variant="elevated" @click="mensagemRecuperacao = true">Enviar Link</v-btn>
+                </v-card-actions>
+              </v-card>
+              <v-alert v-if="mensagemRecuperacao" type="success" class="mt-4" closable>E-mail de recuperação enviado!</v-alert>
+            </v-col>
+          </v-row>
+
+          <!-- TELA 4: PERFIL DO USUÁRIO -->
+          <div v-if="telaAtual === 'perfil'">
+            <v-row justify="center">
+              <v-col cols="12" md="6">
+                <v-card class="pa-4">
+                  <v-card-title class="text-h6 font-weight-bold">Perfil do Professor - Pahot</v-card-title>
+                  <v-card-text>
+                    <v-text-field label="Nome Completo" v-model="perfil.nome" variant="outlined" class="mb-2"></v-text-field>
+                    <v-text-field label="E-mail" v-model="perfil.email" variant="outlined" class="mb-2"></v-text-field>
+                    <v-text-field label="Instituição Principal" v-model="perfil.instituicao" variant="outlined" class="mb-2"></v-text-field>
+                  </v-card-text>
+                  <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn color="success" variant="elevated">Salvar Alterações</v-btn>
+                  </v-card-actions>
+                </v-card>
+              </v-col>
+            </v-row>
+          </div>
+
+          <!-- TELA 5: BANCO DE QUESTÕES -->
+          <div v-if="telaAtual === 'questoes'">
+            <v-row class="mb-2" align="center">
+              <v-col cols="8"><h2>Banco de Questões</h2></v-col>
+              <v-col cols="4" class="text-right">
+                <v-btn color="indigo-darken-3" prepend-icon="mdi-plus" @click="abrirModalQuestao()">Nova Questão</v-btn>
+              </v-col>
+            </v-row>
+            <v-card class="mb-6 pa-4">
+              <v-row>
+                <v-col cols="12" md="3"><v-select label="Matéria" :items="['Português', 'Matemática', 'História']" variant="outlined" density="compact"></v-select></v-col>
+                <v-col cols="12" md="3"><v-select label="Banca" :items="['CESPE', 'FGV', 'VUNESP']" variant="outlined" density="compact"></v-select></v-col>
+                <v-col cols="12" md="4"><v-text-field label="Palavra-chave..." append-inner-icon="mdi-magnify" variant="outlined" density="compact"></v-text-field></v-col>
+                <v-col cols="12" md="2"><v-btn color="indigo" block height="40">Filtrar</v-btn></v-col>
+              </v-row>
+            </v-card>
+            <v-row>
+              <v-col cols="12" v-for="questao in bancoDeQuestoes" :key="questao.id">
+                <v-card>
+                  <v-card-title class="text-subtitle-1 font-weight-bold">{{ questao.banca }} - {{ questao.ano }} - {{ questao.materia }}</v-card-title>
+                  <v-card-text>
+                    <p>{{ questao.enunciado }}</p>
+                    <div class="mt-3">
+                      <v-radio-group v-model="questao.respostaSelecionada" density="compact">
+                        <v-radio v-for="(alt, i) in questao.alternativas" :key="i" :label="alt" :value="i"></v-radio>
+                      </v-radio-group>
+                    </div>
+                  </v-card-text>
+                  <v-card-actions class="bg-grey-lighten-4">
+                    <v-btn color="primary" variant="text" @click="abrirModalQuestao(questao)"><v-icon start>mdi-pencil</v-icon> Editar</v-btn>
+                    <v-spacer></v-spacer>
+                    <v-btn color="success" variant="elevated" @click="adicionarNaProva(questao)"><v-icon start>mdi-plus</v-icon> Adicionar à Prova</v-btn>
+                  </v-card-actions>
+                </v-card>
+              </v-col>
+            </v-row>
+          </div>
+
+          <!-- TELA 6: HISTÓRICO DE PROVAS -->
+          <div v-if="telaAtual === 'provas'">
+            <h2 class="mb-4">Minhas Provas Geradas</h2>
+            <v-table class="elevation-1 rounded-lg">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Título da Prova</th>
+                    <th>Turma / Disciplina</th>
+                    <th>Nº de Questões</th>
+                    <th>Data de Criação</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="p in historicoProvas" :key="p.id">
+                    <td class="font-weight-bold">{{ p.titulo }}</td>
+                    <td>{{ p.turma }}</td>
+                    <td>{{ p.questoes }} questões</td>
+                    <td>{{ p.data }}</td>
+                    <td>
+                      <v-btn icon color="red" variant="text" title="Baixar PDF + OMR">
+                        <v-icon>mdi-file-pdf-box</v-icon>
+                      </v-btn>
+                      <v-btn icon color="indigo" variant="text" title="Corrigir esta turma" @click="telaAtual = 'correcao'">
+                        <v-icon>mdi-scanner</v-icon>
+                      </v-btn>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </v-table>
+          </div>
+
+          <!-- TELA 7: CORREÇÃO OMR E TURMA -->
+          <div v-if="telaAtual === 'correcao'">
+            <v-row justify="center">
+              <v-col cols="12" md="10">
+                <h2 class="mb-4">Correção Automática de Gabaritos OMR</h2>
+                <v-card class="pa-8 text-center" color="grey-lighten-4" style="border: 2px dashed #9e9e9e;">
+                  <v-icon size="56" color="indigo">mdi-cloud-upload</v-icon>
+                  <h3 class="mt-2">Envie as imagens/PDFs das folhas de resposta</h3>
+                  <p class="text-caption text-grey">O Pahot processará automaticamente as marcas de bolinhas</p>
+                  <v-btn color="indigo" class="mt-4" prepend-icon="mdi-folder-search">Selecionar Gabaritos Digitalizados</v-btn>
+                </v-card>
+
+                <!-- Relatório em Lote -->
+                <v-card class="mt-6">
+                  <v-toolbar color="indigo-darken-3">
+                    <v-toolbar-title class="text-subtitle-1 font-weight-bold">Resultados Processados - Turma: 3º Ano A</v-toolbar-title>
+                    <v-spacer></v-spacer>
+                    <v-btn prepend-icon="mdi-file-excel" variant="text">Exportar Notas</v-btn>
+                  </v-toolbar>
+                  <v-table>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Matrícula</th>
+                          <th>Nome do Aluno</th>
+                          <th>Acertos</th>
+                          <th>Nota Final</th>
+                          <th>Status</th>
+                          <th>Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="aluno in turmaResultados" :key="aluno.matricula">
+                          <td>{{ aluno.matricula }}</td>
+                          <td class="font-weight-bold">{{ aluno.nome }}</td>
+                          <td>{{ aluno.acertos }} / 10</td>
+                          <td>
+                            <v-chip :color="aluno.nota >= 6 ? 'green' : 'red'" size="small" class="font-weight-bold">
+                              {{ aluno.nota.toFixed(1) }}
+                            </v-chip>
+                          </td>
+                          <td><v-icon color="green">mdi-check-circle</v-icon> Processado</td>
+                          <td><v-btn size="small" variant="text" color="primary" prepend-icon="mdi-eye">Ver Gabarito</v-btn></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </v-table>
+                </v-card>
+              </v-col>
+            </v-row>
+          </div>
+
+        </v-container>
+      </v-main>
+
+      <!-- MODAL SIMULADOR DE PDF E GABARITO OMR -->
+      <v-dialog v-model="modalPdf" max-width="700px">
+        <v-card>
+          <v-card-title class="bg-indigo-darken-3 text-white">Pré-visualização da Prova + Cartão OMR</v-card-title>
+          <v-card-text class="pa-6">
+            <div class="gabarito-box">
+              <div class="omr-mark top-left"></div>
+              <div class="omr-mark top-right"></div>
+              <div class="omr-mark bottom-left"></div>
+              <div class="omr-mark bottom-right"></div>
+              
+              <div class="text-center mb-4">
+                <h3>PAHOT - FOLHA DE RESPOSTAS (OMR)</h3>
+                <p class="text-caption">Instruções: Preencha completamente a bolinha com caneta preta ou azul.</p>
+              </div>
+              <v-row density="compact" class="my-4">
+                <v-col cols="6"><b>Aluno:</b> ___________________________</v-col>
+                <v-col cols="6"><b>Turma:</b> 3º Ano B</v-col>
+              </v-row>
+              <v-divider class="my-3"></v-divider>
+              <div v-for="n in 5" :key="n" class="d-flex align-center my-2">
+                <span class="mr-4 font-weight-bold">Questão 0{{n}}:</span>
+                <span class="mr-3">(A) O</span>
+                <span class="mr-3">(B) O</span>
+                <span class="mr-3">(C) O</span>
+                <span class="mr-3">(D) O</span>
+              </div>
+            </div>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn variant="text" @click="modalPdf = false">Fechar</v-btn>
+            <v-btn color="success" prepend-icon="mdi-download">Baixar Arquivo Prontinho (PDF)</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- MODAL CADASTRAR/EDITAR QUESTÃO -->
+      <v-dialog v-model="modalQuestao" max-width="600px">
+        <v-card>
+          <v-card-title class="bg-indigo-darken-3 text-white">{{ modoEdicao ? 'Editar Questão' : 'Cadastrar Nova Questão' }}</v-card-title>
+          <v-card-text class="pt-4">
+            <v-row density="compact">
+              <v-col cols="6"><v-text-field v-model="formQuestao.banca" label="Banca" variant="outlined"></v-text-field></v-col>
+              <v-col cols="6"><v-text-field v-model="formQuestao.materia" label="Matéria" variant="outlined"></v-text-field></v-col>
+            </v-row>
+            <v-textarea v-model="formQuestao.enunciado" label="Enunciado" variant="outlined" rows="3"></v-textarea>
+            <h4 class="mb-2">Alternativas</h4>
+            <v-text-field v-for="(alt, idx) in formQuestao.alternativas" :key="idx" v-model="formQuestao.alternativas[idx]" :label="'Alternativa ' + String.fromCharCode(65 + idx)" variant="outlined" density="compact"></v-text-field>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn variant="text" @click="modalQuestao = false">Cancelar</v-btn>
+            <v-btn color="indigo-darken-3" variant="elevated" @click="salvarQuestao()">Salvar</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+    </v-app>
+  </div>
+
+  <!-- BIBLIOTECAS (VUE 3 E VUETIFY 3) -->
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vuetify@3.7.0/dist/vuetify.min.js"></script>
+  
+  <script>
+    const { createApp } = Vue;
+    const { createVuetify } = Vuetify;
+    const vuetify = createVuetify();
+
+    createApp({
+      data() {
+        return {
+          telaAtual: 'login',
+          gavetaProva: false,
+          mensagemRecuperacao: false,
+          modalQuestao: false,
+          modalPdf: false,
+          modoEdicao: false,
+          prova: [],
+          perfil: {
+            nome: 'Prof. Maria Oliveira',
+            email: 'maria.oliveira@escola.edu.br',
+            instituicao: 'Escola Estadual Dom Pedro II'
+          },
+          formQuestao: { banca: '', materia: '', enunciado: '', alternativas: ['', '', '', ''] },
+          historicoProvas: [
+            { id: 101, titulo: 'Simulado ENEM 2026', turma: '3º Ano A', questoes: 10, data: '15/02/2026' },
+            { id: 102, titulo: 'Avaliação de Português', turma: '1º Ano B', questoes: 5, data: '20/02/2026' }
+          ],
+          turmaResultados: [
+            { matricula: '202601', nome: 'João da Silva', acertos: 8, nota: 8.0 },
+            { matricula: '202602', nome: 'Maria Eduarda', acertos: 10, nota: 10.0 },
+            { matricula: '202603', nome: 'Carlos Eduardo', acertos: 5, nota: 5.0 }
+          ],
+          bancoDeQuestoes: [
+            {
+              id: 1, banca: 'FGV', ano: 2024, materia: 'Português',
+              enunciado: 'Assinale a alternativa que apresenta um erro de concordância verbal:',
+              alternativas: ['a) Haviam muitas pessoas na sala.', 'b) Faz dois anos que não o vejo.', 'c) Alugam-se casas.', 'd) Deve haver outras opções.'],
+              respostaSelecionada: null
+            },
+            {
+              id: 2, banca: 'CESPE', ano: 2023, materia: 'Matemática',
+              enunciado: 'Se a soma de dois números é 15 e a diferença é 3, qual é o maior número?',
+              alternativas: ['a) 8', 'b) 9', 'c) 10', 'd) 12'],
+              respostaSelecionada: null
+            }
+          ]
+        }
+      },
+      methods: {
+        adicionarNaProva(questao) {
+          this.prova.push(questao);
+          this.gavetaProva = true; 
+        },
+        removerDaProva(index) {
+          this.prova.splice(index, 1);
+        },
+        abrirModalQuestao(questao = null) {
+          if (questao) {
+            this.modoEdicao = true;
+            this.formQuestao = JSON.parse(JSON.stringify(questao));
+          } else {
+            this.modoEdicao = false;
+            this.formQuestao = { banca: '', materia: '', enunciado: '', alternativas: ['', '', '', ''] };
+          }
+          this.modalQuestao = true;
+        },
+        salvarQuestao() {
+          if (!this.modoEdicao) {
+            this.bancoDeQuestoes.unshift({
+              id: Date.now(),
+              banca: this.formQuestao.banca || 'Própria',
+              ano: 2026,
+              materia: this.formQuestao.materia || 'Geral',
+              enunciado: this.formQuestao.enunciado,
+              alternativas: [...this.formQuestao.alternativas],
+              respostaSelecionada: null
+            });
+          }
+          this.modalQuestao = false;
+        }
+      }
+    }).use(vuetify).mount('#app');
+  </script>
+</body>
+</html>
